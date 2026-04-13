@@ -1,6 +1,7 @@
 import Foundation
 import ApplicationServices
 import AppKit
+import ScreenCaptureKit
 
 struct AppContext {
     let appName: String?
@@ -64,7 +65,7 @@ Return only two sentences, no labels, no markdown, no extra commentary.
 
         let windowTitle = focusedWindowTitle(from: appElement) ?? appName
         let selectedText = selectedText(from: appElement)
-        let screenshot = captureActiveWindowScreenshot(
+        let screenshot = await captureActiveWindowScreenshot(
             processIdentifier: frontmostApp.processIdentifier,
             appElement: appElement,
             focusedWindowTitle: windowTitle
@@ -289,7 +290,7 @@ Selected text: \(selectedText ?? "None")
               CFGetTypeID(rawValue) == AXUIElementGetTypeID() else {
             return nil
         }
-        return unsafeBitCast(rawValue, to: AXUIElement.self)
+        return unsafeDowncast(rawValue, to: AXUIElement.self)
     }
 
     private func accessibilityString(from element: AXUIElement, attribute: CFString) -> String? {
@@ -308,7 +309,7 @@ Selected text: \(selectedText ?? "None")
             return nil
         }
 
-        let axValue = unsafeBitCast(rawValue, to: AXValue.self)
+        let axValue = unsafeDowncast(rawValue, to: AXValue.self)
         var point = CGPoint.zero
         guard AXValueGetValue(axValue, .cgPoint, &point) else { return nil }
         return point
@@ -323,7 +324,7 @@ Selected text: \(selectedText ?? "None")
             return nil
         }
 
-        let axValue = unsafeBitCast(rawValue, to: AXValue.self)
+        let axValue = unsafeDowncast(rawValue, to: AXValue.self)
         var size = CGSize.zero
         guard AXValueGetValue(axValue, .cgSize, &size) else { return nil }
         return size
@@ -333,7 +334,7 @@ Selected text: \(selectedText ?? "None")
         processIdentifier: pid_t,
         appElement: AXUIElement,
         focusedWindowTitle: String?
-    ) -> (dataURL: String?, mimeType: String?, error: String?) {
+    ) async -> (dataURL: String?, mimeType: String?, error: String?) {
         if !CGPreflightScreenCaptureAccess() {
             return (
                 nil,
@@ -403,7 +404,7 @@ Selected text: \(selectedText ?? "None")
                     return lhs.0.layer < rhs.0.layer
                 })
                     .first?.0 {
-                if let dataURL = captureWindowImage(
+                if let dataURL = await captureWindowImage(
                     windowID: activeWindow.id,
                     fileType: .jpeg,
                     mimeType: "image/jpeg",
@@ -437,7 +438,7 @@ Selected text: \(selectedText ?? "None")
                        return lhs.layer < rhs.layer
                    })
                    .first {
-                if let dataURL = captureWindowImage(
+                if let dataURL = await captureWindowImage(
                     windowID: activeWindow.id,
                     fileType: .jpeg,
                     mimeType: "image/jpeg",
@@ -449,12 +450,11 @@ Selected text: \(selectedText ?? "None")
             }
         }
 
-        guard let fullScreenImage = CGWindowListCreateImage(
-            CGRect.infinite,
-            .optionOnScreenOnly,
-            kCGNullWindowID,
-            [.bestResolution]
-        ) else {
+        let fullScreenImage = await captureFallbackDisplayImage(
+            focusedWindowBounds: focusedWindowBounds(from: appElement)
+        )
+
+        guard let fullScreenImage else {
             return (nil, nil, "Could not capture screenshot (screen recording permission or window access issue)")
         }
 
@@ -478,13 +478,21 @@ Selected text: \(selectedText ?? "None")
         mimeType: String,
         compression: Double? = nil,
         maxDimension: CGFloat? = nil
-    ) -> String? {
-        guard let image = CGWindowListCreateImage(
-            .null,
-            .optionIncludingWindow,
-            windowID,
-            [.bestResolution]
-        ) else {
+    ) async -> String? {
+        guard let shareableContent = await currentShareableContent(),
+              let window = shareableContent.windows.first(where: { $0.windowID == windowID }) else {
+            return nil
+        }
+
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let windowSize = window.frame.size
+        let image = await captureImage(
+            using: filter,
+            contentRect: CGRect(origin: .zero, size: windowSize),
+            scaleFactor: displayScaleFactor(containing: window.frame)
+        )
+
+        guard let image else {
             return nil
         }
 
@@ -499,6 +507,62 @@ Selected text: \(selectedText ?? "None")
         }
 
         return nil
+    }
+
+    private func captureFallbackDisplayImage(focusedWindowBounds: CGRect?) async -> CGImage? {
+        guard let shareableContent = await currentShareableContent() else {
+            return nil
+        }
+
+        let candidateRects = [focusedWindowBounds].compactMap { $0 } + shareableContent.displays.map(\.frame)
+        let unionRect = candidateRects.reduce(CGRect.null) { partial, rect in
+            partial.isNull ? rect : partial.union(rect)
+        }
+        guard !unionRect.isNull else {
+            return nil
+        }
+        return await captureImage(in: unionRect)
+    }
+
+    private func currentShareableContent() async -> SCShareableContent? {
+        await withCheckedContinuation { continuation in
+            SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, _ in
+                continuation.resume(returning: content)
+            }
+        }
+    }
+
+    private func captureImage(
+        using filter: SCContentFilter,
+        contentRect: CGRect,
+        scaleFactor: CGFloat
+    ) async -> CGImage? {
+        let config = SCStreamConfiguration()
+        config.width = max(1, Int(contentRect.width * scaleFactor))
+        config.height = max(1, Int(contentRect.height * scaleFactor))
+        config.showsCursor = false
+        config.scalesToFit = true
+
+        return await withCheckedContinuation { continuation in
+            SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) { image, _ in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
+    private func captureImage(in rect: CGRect) async -> CGImage? {
+        await withCheckedContinuation { continuation in
+            SCScreenshotManager.captureImage(in: rect) { image, _ in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
+    private func displayScaleFactor(containing rect: CGRect) -> CGFloat {
+        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(rect) }) {
+            return max(1, screen.backingScaleFactor)
+        }
+        return max(1, NSScreen.main?.backingScaleFactor ?? 2)
     }
 
     private func boundsValue(_ value: Any?) -> CGSize? {

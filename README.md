@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/zachlatta/freeflow/releases/latest/download/FreeFlow.dmg"><b>⬇ Download FreeFlow.dmg</b></a><br>
-  <sub>Works on all Macs (Apple Silicon + Intel)</sub>
+  <sub>Requires macOS 15.2 or later. Works on Apple Silicon and Intel Macs.</sub>
 </p>
 
 ---
@@ -32,6 +32,8 @@ It's called FreeFlow. Here's how it works:
 1. Download the app from above or [click here](https://github.com/zachlatta/freeflow/releases/latest/download/FreeFlow.dmg)
 2. Get a free Groq API key from [groq.com](https://groq.com/)
 3. Hold `Fn` to talk, or tap `Command-Fn` to start and stop dictation, and have whatever you say pasted into the current text field
+
+Minimum OS version: macOS 15.2
 
 You can also customize both shortcuts. If your toggle shortcut extends your hold shortcut, you can start in hold mode and press the extra modifier keys to latch into tap mode without stopping the recording.
 

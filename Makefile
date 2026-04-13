@@ -27,13 +27,13 @@ ifeq ($(ARCH),universal)
 		-parse-as-library \
 		-o "$(MACOS_DIR)/$(APP_NAME)-arm64" \
 		-sdk $(shell xcrun --show-sdk-path) \
-		-target arm64-apple-macosx13.0 \
+		-target arm64-apple-macosx15.2 \
 		$(SOURCES)
 	swiftc \
 		-parse-as-library \
 		-o "$(MACOS_DIR)/$(APP_NAME)-x86_64" \
 		-sdk $(shell xcrun --show-sdk-path) \
-		-target x86_64-apple-macosx13.0 \
+		-target x86_64-apple-macosx15.2 \
 		$(SOURCES)
 	lipo -create -output "$(MACOS_DIR)/$(APP_NAME)" \
 		"$(MACOS_DIR)/$(APP_NAME)-arm64" \
@@ -44,7 +44,7 @@ else
 		-parse-as-library \
 		-o "$(MACOS_DIR)/$(APP_NAME)" \
 		-sdk $(shell xcrun --show-sdk-path) \
-		-target $(ARCH)-apple-macosx13.0 \
+		-target $(ARCH)-apple-macosx15.2 \
 		$(SOURCES)
 endif
 	@cp Info.plist "$(CONTENTS)/"
