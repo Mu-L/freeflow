@@ -289,7 +289,7 @@ Selected text: \(selectedText ?? "None")
               CFGetTypeID(rawValue) == AXUIElementGetTypeID() else {
             return nil
         }
-        return unsafeBitCast(rawValue, to: AXUIElement.self)
+        return unsafeDowncast(rawValue, to: AXUIElement.self)
     }
 
     private func accessibilityString(from element: AXUIElement, attribute: CFString) -> String? {
@@ -308,7 +308,7 @@ Selected text: \(selectedText ?? "None")
             return nil
         }
 
-        let axValue = unsafeBitCast(rawValue, to: AXValue.self)
+        let axValue = unsafeDowncast(rawValue, to: AXValue.self)
         var point = CGPoint.zero
         guard AXValueGetValue(axValue, .cgPoint, &point) else { return nil }
         return point
@@ -323,7 +323,7 @@ Selected text: \(selectedText ?? "None")
             return nil
         }
 
-        let axValue = unsafeBitCast(rawValue, to: AXValue.self)
+        let axValue = unsafeDowncast(rawValue, to: AXValue.self)
         var size = CGSize.zero
         guard AXValueGetValue(axValue, .cgSize, &size) else { return nil }
         return size

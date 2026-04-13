@@ -281,6 +281,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
     private var accessibilityTimer: Timer?
     private var audioLevelCancellable: AnyCancellable?
     private var debugOverlayTimer: Timer?
+    private var debugOverlayPhase = 0.0
     private var transcribingIndicatorTask: Task<Void, Never>?
     private var contextService: AppContextService
     private var contextCaptureTask: Task<AppContext?, Never>?
@@ -1400,7 +1401,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
               CFGetTypeID(rawValue) == AXUIElementGetTypeID() else {
             return nil
         }
-        return unsafeBitCast(rawValue, to: AXUIElement.self)
+        return unsafeDowncast(rawValue, to: AXUIElement.self)
     }
 
     private func accessibilityString(from element: AXUIElement, attribute: CFString) -> String? {
@@ -1489,14 +1490,15 @@ final class AppState: ObservableObject, @unchecked Sendable {
     private func startDebugOverlay() {
         isDebugOverlayActive = true
         overlayManager.showRecording()
+        debugOverlayPhase = 0.0
 
-        // Simulate audio levels with a timer
-        var phase: Double = 0.0
+        // Keep the oscillator phase on AppState instead of mutating a captured
+        // local, which avoids Swift 6's warning about mutable closure captures.
         debugOverlayTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            phase += 0.15
+            self.debugOverlayPhase += 0.15
             // Generate a fake audio level that oscillates like speech
-            let base = 0.3 + 0.2 * sin(phase)
+            let base = 0.3 + 0.2 * sin(self.debugOverlayPhase)
             let noise = Float.random(in: -0.15...0.15)
             let level = min(max(Float(base) + noise, 0.0), 1.0)
             self.overlayManager.updateAudioLevel(level)
@@ -1506,6 +1508,7 @@ final class AppState: ObservableObject, @unchecked Sendable {
     private func stopDebugOverlay() {
         debugOverlayTimer?.invalidate()
         debugOverlayTimer = nil
+        debugOverlayPhase = 0.0
         isDebugOverlayActive = false
         overlayManager.dismiss()
     }
